@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>問い合わせ管理システム</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>問い合わせ管理システム</h1>
+    </header>
+
+    <div class="layout">
+      <section class="panel" aria-labelledby="form-title">
+        <div class="panel-header">
+          <h2 class="panel-title" id="form-title">問い合わせ登録</h2>
+        </div>
+
+        <p class="message" id="save-message">問い合わせを登録しました。</p>
+
+        <form id="inquiry-form">
+          <div class="form-group">
+            <label for="name">名前</label>
+            <input type="text" id="name" name="name" autocomplete="name" required>
+          </div>
+
+          <div class="form-group">
+            <label for="email">メールアドレス</label>
+            <input type="email" id="email" name="email" autocomplete="email" required>
+          </div>
+
+          <div class="form-group">
+            <label for="content">問い合わせ内容</label>
+            <textarea id="content" name="content" required></textarea>
+          </div>
+
+          <div class="button-row">
+            <button class="primary-button" type="submit">登録する</button>
+            <button class="secondary-button" type="reset">入力を消す</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="list-title">
+        <div class="panel-header">
+          <h2 class="panel-title" id="list-title">問い合わせ一覧</h2>
+          <span class="count" id="inquiry-count">0件</span>
+        </div>
+
+        <div class="list-area">
+          <div class="filter-area" aria-label="問い合わせを検索・絞り込み">
+            <div class="filter-group">
+              <label for="search-keyword">キーワード検索</label>
+              <input type="search" id="search-keyword" placeholder="名前・メール・内容で検索">
+            </div>
+
+            <div class="filter-group">
+              <label for="status-filter">対応状況</label>
+              <select id="status-filter">
+                <option value="all">すべて</option>
+                <option value="未対応">未対応</option>
+                <option value="対応済み">対応済み</option>
+              </select>
+            </div>
+
+            <div class="filter-group">
+              <label for="sort-order">並べ替え</label>
+              <select id="sort-order">
+                <option value="newest">新しい順</option>
+                <option value="oldest">古い順</option>
+              </select>
+            </div>
+          </div>
+
+          <p class="empty" id="empty-message" aria-live="polite">まだ問い合わせは登録されていません。</p>
+          <ul class="inquiry-list" id="inquiry-list"></ul>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
