@@ -1,4 +1,3 @@
-const STORAGE_KEY = "beginnerInquiryList";
 const STATUS_OPEN = "未対応";
 const STATUS_DONE = "対応済み";
 
@@ -13,76 +12,154 @@ const inquiryList = document.getElementById("inquiry-list");
 const emptyMessage = document.getElementById("empty-message");
 const inquiryCount = document.getElementById("inquiry-count");
 const saveMessage = document.getElementById("save-message");
+const formControls = form.querySelectorAll("input, textarea, button");
+const submitButton = form.querySelector('button[type="submit"]');
 
-let inquiries = loadInquiries();
-
-renderInquiries();
+let inquiries = [];
+let isLoadingInquiries = false;
+let isSubmitting = false;
+const pendingInquiryIds = new Set();
+let messageTimer;
 
 searchInput.addEventListener("input", renderInquiries);
 statusFilter.addEventListener("change", renderInquiries);
 sortOrder.addEventListener("change", renderInquiries);
 
-form.addEventListener("submit", (event) => {
+form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
-  const createdAt = new Date();
+  if (isLoadingInquiries || isSubmitting) {
+    return;
+  }
+
   const inquiry = {
-    id: Date.now(),
     name: nameInput.value.trim(),
     email: emailInput.value.trim(),
-    content: contentInput.value.trim(),
-    status: STATUS_OPEN,
-    createdAt: createdAt.toISOString()
+    content: contentInput.value.trim()
   };
 
   if (!inquiry.name || !inquiry.email || !inquiry.content) {
     return;
   }
 
-  inquiries.unshift(inquiry);
-  saveInquiries();
-  renderInquiries();
+  let isSaved = false;
+  isSubmitting = true;
+  updateFormState();
 
-  form.reset();
-  nameInput.focus();
-  showSaveMessage();
+  try {
+    const savedInquiry = await requestJson(
+      "/api/inquiries",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(inquiry)
+      },
+      "問い合わせを登録できませんでした。通信状況を確認して、もう一度お試しください。"
+    );
+
+    if (!savedInquiry || typeof savedInquiry !== "object") {
+      throw new Error("問い合わせの登録結果を確認できませんでした。");
+    }
+
+    inquiries.unshift(normalizeInquiry(savedInquiry));
+    renderInquiries();
+    form.reset();
+    showMessage("問い合わせを登録しました。");
+    isSaved = true;
+  } catch (error) {
+    showMessage(getErrorMessage(error, "問い合わせを登録できませんでした。"), true);
+  } finally {
+    isSubmitting = false;
+    updateFormState();
+
+    if (isSaved) {
+      nameInput.focus();
+    }
+  }
 });
 
-inquiryList.addEventListener("click", (event) => {
-  const id = Number(event.target.dataset.id);
+inquiryList.addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-id]");
 
-  if (event.target.classList.contains("delete-button")) {
-    deleteInquiry(id);
+  if (!button) {
     return;
   }
 
-  if (event.target.classList.contains("status-button")) {
-    toggleStatus(id);
+  const id = Number(button.dataset.id);
+
+  if (!Number.isInteger(id) || pendingInquiryIds.has(id)) {
+    return;
+  }
+
+  if (button.classList.contains("delete-button")) {
+    const isConfirmed = window.confirm("本当に削除しますか？");
+
+    if (isConfirmed) {
+      await deleteInquiry(id);
+    }
+
+    return;
+  }
+
+  if (button.classList.contains("status-button")) {
+    await toggleStatus(id);
   }
 });
 
-function loadInquiries() {
-  const savedData = localStorage.getItem(STORAGE_KEY);
+loadInquiries();
 
-  if (!savedData) {
-    return [];
-  }
+async function loadInquiries() {
+  isLoadingInquiries = true;
+  updateFormState();
+  emptyMessage.textContent = "問い合わせを読み込んでいます。";
+  emptyMessage.style.display = "block";
+  inquiryList.innerHTML = "";
 
   try {
-    const parsedData = JSON.parse(savedData);
+    const savedInquiries = await requestJson(
+      "/api/inquiries",
+      {},
+      "問い合わせ一覧を取得できませんでした。サーバーが起動しているか確認してください。"
+    );
 
-    return parsedData.map((inquiry) => ({
-      status: STATUS_OPEN,
-      createdAt: null,
-      ...inquiry
-    }));
+    if (!Array.isArray(savedInquiries)) {
+      throw new Error("問い合わせ一覧の形式が正しくありません。");
+    }
+
+    inquiries = savedInquiries.map(normalizeInquiry);
+    renderInquiries();
   } catch (error) {
-    return [];
+    inquiries = [];
+    renderInquiries();
+    showMessage(
+      getErrorMessage(error, "問い合わせ一覧を取得できませんでした。"),
+      true
+    );
+  } finally {
+    isLoadingInquiries = false;
+    updateFormState();
   }
 }
 
-function saveInquiries() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(inquiries));
+function normalizeInquiry(inquiry) {
+  return {
+    id: inquiry.id,
+    name: inquiry.name,
+    email: inquiry.email,
+    content: inquiry.content,
+    status: inquiry.status,
+    createdAt: inquiry.created_at
+  };
+}
+
+function updateFormState() {
+  const isBusy = isLoadingInquiries || isSubmitting;
+
+  formControls.forEach((control) => {
+    control.disabled = isBusy;
+  });
+
+  submitButton.textContent = isSubmitting ? "登録中..." : "登録する";
 }
 
 function renderInquiries() {
@@ -98,8 +175,10 @@ function renderInquiries() {
 
   displayedInquiries.forEach((inquiry) => {
     const isDone = inquiry.status === STATUS_DONE;
+    const isPending = pendingInquiryIds.has(inquiry.id);
     const listItem = document.createElement("li");
     listItem.className = `inquiry-card ${isDone ? "is-done" : ""}`;
+    listItem.setAttribute("aria-busy", String(isPending));
 
     const topArea = document.createElement("div");
     topArea.className = "inquiry-top";
@@ -129,13 +208,19 @@ function renderInquiries() {
     statusButton.className = `status-button ${isDone ? "is-done" : ""}`;
     statusButton.type = "button";
     statusButton.dataset.id = inquiry.id;
+    statusButton.disabled = isPending;
     statusButton.setAttribute("aria-pressed", String(isDone));
-    statusButton.textContent = isDone ? "未対応に戻す" : "対応済みにする";
+    statusButton.textContent = isPending
+      ? "処理中..."
+      : isDone
+        ? "未対応に戻す"
+        : "対応済みにする";
 
     const deleteButton = document.createElement("button");
     deleteButton.className = "delete-button";
     deleteButton.type = "button";
     deleteButton.dataset.id = inquiry.id;
+    deleteButton.disabled = isPending;
     deleteButton.textContent = "削除";
 
     const content = document.createElement("p");
@@ -218,38 +303,111 @@ function hasActiveFilter() {
   return searchInput.value.trim() !== "" || statusFilter.value !== "all";
 }
 
-function toggleStatus(id) {
-  inquiries = inquiries.map((inquiry) => {
-    if (inquiry.id !== id) {
-      return inquiry;
-    }
+async function toggleStatus(id) {
+  const inquiry = inquiries.find((item) => item.id === id);
 
-    return {
-      ...inquiry,
-      status: inquiry.status === STATUS_DONE ? STATUS_OPEN : STATUS_DONE
-    };
-  });
-
-  saveInquiries();
-  renderInquiries();
-}
-
-function deleteInquiry(id) {
-  const isConfirmed = window.confirm("本当に削除しますか？");
-
-  if (!isConfirmed) {
+  if (!inquiry) {
     return;
   }
 
-  inquiries = inquiries.filter((inquiry) => inquiry.id !== id);
-  saveInquiries();
+  const nextStatus = inquiry.status === STATUS_DONE ? STATUS_OPEN : STATUS_DONE;
+  pendingInquiryIds.add(id);
   renderInquiries();
+
+  try {
+    const updatedInquiry = await requestJson(
+      `/api/inquiries/${id}/status`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus })
+      },
+      "対応状況を更新できませんでした。通信状況を確認して、もう一度お試しください。"
+    );
+
+    if (!updatedInquiry || typeof updatedInquiry.status !== "string") {
+      throw new Error("対応状況の更新結果を確認できませんでした。");
+    }
+
+    inquiries = inquiries.map((item) => {
+      if (item.id !== id) {
+        return item;
+      }
+
+      return { ...item, status: updatedInquiry.status };
+    });
+    showMessage("対応状況を更新しました。");
+  } catch (error) {
+    showMessage(getErrorMessage(error, "対応状況を更新できませんでした。"), true);
+  } finally {
+    pendingInquiryIds.delete(id);
+    renderInquiries();
+  }
 }
 
-function showSaveMessage() {
+async function deleteInquiry(id) {
+  pendingInquiryIds.add(id);
+  renderInquiries();
+
+  try {
+    await requestJson(
+      `/api/inquiries/${id}`,
+      { method: "DELETE" },
+      "問い合わせを削除できませんでした。通信状況を確認して、もう一度お試しください。"
+    );
+
+    inquiries = inquiries.filter((inquiry) => inquiry.id !== id);
+    showMessage("問い合わせを削除しました。");
+  } catch (error) {
+    showMessage(getErrorMessage(error, "問い合わせを削除できませんでした。"), true);
+  } finally {
+    pendingInquiryIds.delete(id);
+    renderInquiries();
+  }
+}
+
+async function requestJson(url, options, fallbackMessage) {
+  let response;
+
+  try {
+    response = await fetch(url, options);
+  } catch (error) {
+    throw new Error(fallbackMessage);
+  }
+
+  const data = await readResponseJson(response);
+
+  if (!response.ok) {
+    throw new Error(getApiErrorMessage(data, fallbackMessage));
+  }
+
+  return data;
+}
+
+async function readResponseJson(response) {
+  try {
+    return await response.json();
+  } catch (error) {
+    return null;
+  }
+}
+
+function getApiErrorMessage(data, fallbackMessage) {
+  return data && typeof data.error === "string" ? data.error : fallbackMessage;
+}
+
+function getErrorMessage(error, fallbackMessage) {
+  return error instanceof Error && error.message ? error.message : fallbackMessage;
+}
+
+function showMessage(message, isError = false) {
+  clearTimeout(messageTimer);
+  saveMessage.textContent = message;
+  saveMessage.classList.toggle("error", isError);
+  saveMessage.setAttribute("role", isError ? "alert" : "status");
   saveMessage.classList.add("show");
 
-  setTimeout(() => {
+  messageTimer = setTimeout(() => {
     saveMessage.classList.remove("show");
-  }, 1800);
+  }, isError ? 5000 : 1800);
 }

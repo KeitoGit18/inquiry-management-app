@@ -143,6 +143,11 @@ button:active {
   transform: translateY(1px);
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .primary-button {
   background: var(--primary);
   color: #fff;
@@ -205,6 +210,11 @@ button:active {
 
 .message.show {
   display: block;
+}
+
+.message.error {
+  background: var(--danger-bg);
+  color: var(--danger);
 }
 
 .filter-area {
