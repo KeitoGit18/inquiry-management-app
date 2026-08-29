@@ -1,10 +1,6 @@
 const STATUS_OPEN = "未対応";
 const STATUS_DONE = "対応済み";
 
-const form = document.getElementById("inquiry-form");
-const nameInput = document.getElementById("name");
-const emailInput = document.getElementById("email");
-const contentInput = document.getElementById("content");
 const searchInput = document.getElementById("search-keyword");
 const statusFilter = document.getElementById("status-filter");
 const sortOrder = document.getElementById("sort-order");
@@ -12,71 +8,14 @@ const inquiryList = document.getElementById("inquiry-list");
 const emptyMessage = document.getElementById("empty-message");
 const inquiryCount = document.getElementById("inquiry-count");
 const saveMessage = document.getElementById("save-message");
-const formControls = form.querySelectorAll("input, textarea, button");
-const submitButton = form.querySelector('button[type="submit"]');
 
 let inquiries = [];
-let isLoadingInquiries = false;
-let isSubmitting = false;
 const pendingInquiryIds = new Set();
 let messageTimer;
 
 searchInput.addEventListener("input", renderInquiries);
 statusFilter.addEventListener("change", renderInquiries);
 sortOrder.addEventListener("change", renderInquiries);
-
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  if (isLoadingInquiries || isSubmitting) {
-    return;
-  }
-
-  const inquiry = {
-    name: nameInput.value.trim(),
-    email: emailInput.value.trim(),
-    content: contentInput.value.trim()
-  };
-
-  if (!inquiry.name || !inquiry.email || !inquiry.content) {
-    return;
-  }
-
-  let isSaved = false;
-  isSubmitting = true;
-  updateFormState();
-
-  try {
-    const savedInquiry = await requestJson(
-      "/api/inquiries",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(inquiry)
-      },
-      "問い合わせを登録できませんでした。通信状況を確認して、もう一度お試しください。"
-    );
-
-    if (!savedInquiry || typeof savedInquiry !== "object") {
-      throw new Error("問い合わせの登録結果を確認できませんでした。");
-    }
-
-    inquiries.unshift(normalizeInquiry(savedInquiry));
-    renderInquiries();
-    form.reset();
-    showMessage("問い合わせを登録しました。");
-    isSaved = true;
-  } catch (error) {
-    showMessage(getErrorMessage(error, "問い合わせを登録できませんでした。"), true);
-  } finally {
-    isSubmitting = false;
-    updateFormState();
-
-    if (isSaved) {
-      nameInput.focus();
-    }
-  }
-});
 
 inquiryList.addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-id]");
@@ -109,21 +48,19 @@ inquiryList.addEventListener("click", async (event) => {
 loadInquiries();
 
 async function loadInquiries() {
-  isLoadingInquiries = true;
-  updateFormState();
-  emptyMessage.textContent = "問い合わせを読み込んでいます。";
+  emptyMessage.textContent = "お問い合わせを読み込んでいます。";
   emptyMessage.style.display = "block";
-  inquiryList.innerHTML = "";
+  inquiryList.textContent = "";
 
   try {
     const savedInquiries = await requestJson(
       "/api/inquiries",
       {},
-      "問い合わせ一覧を取得できませんでした。サーバーが起動しているか確認してください。"
+      "お問い合わせ一覧を取得できませんでした。サーバーが起動しているか確認してください。"
     );
 
     if (!Array.isArray(savedInquiries)) {
-      throw new Error("問い合わせ一覧の形式が正しくありません。");
+      throw new Error("お問い合わせ一覧の形式が正しくありません。");
     }
 
     inquiries = savedInquiries.map(normalizeInquiry);
@@ -132,12 +69,9 @@ async function loadInquiries() {
     inquiries = [];
     renderInquiries();
     showMessage(
-      getErrorMessage(error, "問い合わせ一覧を取得できませんでした。"),
+      getErrorMessage(error, "お問い合わせ一覧を取得できませんでした。"),
       true
     );
-  } finally {
-    isLoadingInquiries = false;
-    updateFormState();
   }
 }
 
@@ -152,32 +86,22 @@ function normalizeInquiry(inquiry) {
   };
 }
 
-function updateFormState() {
-  const isBusy = isLoadingInquiries || isSubmitting;
-
-  formControls.forEach((control) => {
-    control.disabled = isBusy;
-  });
-
-  submitButton.textContent = isSubmitting ? "登録中..." : "登録する";
-}
-
 function renderInquiries() {
   const filteredInquiries = getFilteredInquiries();
   const displayedInquiries = sortInquiriesByDate(filteredInquiries);
 
-  inquiryList.innerHTML = "";
-  inquiryCount.textContent = `${displayedInquiries.length}件`;
+  inquiryList.textContent = "";
+  inquiryCount.textContent = displayedInquiries.length + "件";
   emptyMessage.style.display = displayedInquiries.length === 0 ? "block" : "none";
   emptyMessage.textContent = hasActiveFilter()
-    ? "該当する問い合わせはありません"
-    : "まだ問い合わせは登録されていません。";
+    ? "該当するお問い合わせはありません"
+    : "まだお問い合わせが登録されていません。";
 
   displayedInquiries.forEach((inquiry) => {
     const isDone = inquiry.status === STATUS_DONE;
     const isPending = pendingInquiryIds.has(inquiry.id);
     const listItem = document.createElement("li");
-    listItem.className = `inquiry-card ${isDone ? "is-done" : ""}`;
+    listItem.className = "inquiry-card" + (isDone ? " is-done" : "");
     listItem.setAttribute("aria-busy", String(isPending));
 
     const topArea = document.createElement("div");
@@ -195,23 +119,23 @@ function renderInquiries() {
 
     const date = document.createElement("span");
     date.className = "inquiry-date";
-    date.textContent = `登録日時：${formatCreatedAt(inquiry.createdAt)}`;
+    date.textContent = "登録日時: " + formatCreatedAt(inquiry.createdAt);
 
     const statusBadge = document.createElement("span");
-    statusBadge.className = `status-badge ${isDone ? "is-done" : "is-open"}`;
+    statusBadge.className = "status-badge " + (isDone ? "is-done" : "is-open");
     statusBadge.textContent = inquiry.status;
 
     const actionArea = document.createElement("div");
     actionArea.className = "inquiry-actions";
 
     const statusButton = document.createElement("button");
-    statusButton.className = `status-button ${isDone ? "is-done" : ""}`;
+    statusButton.className = "status-button" + (isDone ? " is-done" : "");
     statusButton.type = "button";
     statusButton.dataset.id = inquiry.id;
     statusButton.disabled = isPending;
     statusButton.setAttribute("aria-pressed", String(isDone));
     statusButton.textContent = isPending
-      ? "処理中..."
+      ? "更新中..."
       : isDone
         ? "未対応に戻す"
         : "対応済みにする";
@@ -240,7 +164,8 @@ function getFilteredInquiries() {
   const selectedStatus = statusFilter.value;
 
   return inquiries.filter((inquiry) => {
-    const searchableText = `${inquiry.name} ${inquiry.email} ${inquiry.content}`.toLowerCase();
+    const searchableText = (inquiry.name + " " + inquiry.email + " " + inquiry.content)
+      .toLowerCase();
     const matchesKeyword = !keyword || searchableText.includes(keyword);
     const matchesStatus = selectedStatus === "all" || inquiry.status === selectedStatus;
 
@@ -249,7 +174,7 @@ function getFilteredInquiries() {
 }
 
 function sortInquiriesByDate(inquiriesToSort) {
-  return inquiriesToSort.sort((first, second) => {
+  return [...inquiriesToSort].sort((first, second) => {
     const firstTimestamp = getCreatedTimestamp(first.createdAt);
     const secondTimestamp = getCreatedTimestamp(second.createdAt);
 
@@ -296,7 +221,7 @@ function formatCreatedAt(createdAt) {
   const hours = String(date.getHours()).padStart(2, "0");
   const minutes = String(date.getMinutes()).padStart(2, "0");
 
-  return `${year}/${month}/${day} ${hours}:${minutes}`;
+  return year + "/" + month + "/" + day + " " + hours + ":" + minutes;
 }
 
 function hasActiveFilter() {
@@ -316,7 +241,7 @@ async function toggleStatus(id) {
 
   try {
     const updatedInquiry = await requestJson(
-      `/api/inquiries/${id}/status`,
+      "/api/inquiries/" + id + "/status",
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -351,15 +276,15 @@ async function deleteInquiry(id) {
 
   try {
     await requestJson(
-      `/api/inquiries/${id}`,
+      "/api/inquiries/" + id,
       { method: "DELETE" },
-      "問い合わせを削除できませんでした。通信状況を確認して、もう一度お試しください。"
+      "お問い合わせを削除できませんでした。通信状況を確認して、もう一度お試しください。"
     );
 
     inquiries = inquiries.filter((inquiry) => inquiry.id !== id);
-    showMessage("問い合わせを削除しました。");
+    showMessage("お問い合わせを削除しました。");
   } catch (error) {
-    showMessage(getErrorMessage(error, "問い合わせを削除できませんでした。"), true);
+    showMessage(getErrorMessage(error, "お問い合わせを削除できませんでした。"), true);
   } finally {
     pendingInquiryIds.delete(id);
     renderInquiries();
@@ -409,5 +334,5 @@ function showMessage(message, isError = false) {
 
   messageTimer = setTimeout(() => {
     saveMessage.classList.remove("show");
-  }, isError ? 5000 : 1800);
+  }, isError ? 5000 : 3000);
 }

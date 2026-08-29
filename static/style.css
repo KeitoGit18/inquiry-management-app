@@ -53,6 +53,10 @@ h1 {
   align-items: start;
 }
 
+.public-layout {
+  grid-template-columns: minmax(280px, 560px);
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);

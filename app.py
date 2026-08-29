@@ -48,6 +48,11 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/admin")
+def admin():
+    return render_template("admin.html")
+
+
 @app.route("/api/inquiries", methods=["GET"])
 def get_inquiries():
     connection = get_db_connection()

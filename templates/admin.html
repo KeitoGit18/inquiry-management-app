@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>お問い合わせ管理</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>お問い合わせ管理</h1>
+    </header>
+
+    <section class="panel" aria-labelledby="list-title">
+      <div class="panel-header">
+        <h2 class="panel-title" id="list-title">お問い合わせ一覧</h2>
+        <span class="count" id="inquiry-count">0件</span>
+      </div>
+
+      <p class="message" id="save-message" aria-live="polite"></p>
+
+      <div class="list-area">
+        <div class="filter-area" aria-label="お問い合わせを検索・絞り込み">
+          <div class="filter-group">
+            <label for="search-keyword">キーワード検索</label>
+            <input type="search" id="search-keyword" placeholder="名前・メール・内容で検索">
+          </div>
+
+          <div class="filter-group">
+            <label for="status-filter">対応状況</label>
+            <select id="status-filter">
+              <option value="all">すべて</option>
+              <option value="未対応">未対応</option>
+              <option value="対応済み">対応済み</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="sort-order">並べ替え</label>
+            <select id="sort-order">
+              <option value="newest">新しい順</option>
+              <option value="oldest">古い順</option>
+            </select>
+          </div>
+        </div>
+
+        <p class="empty" id="empty-message" aria-live="polite">まだお問い合わせが登録されていません。</p>
+        <ul class="inquiry-list" id="inquiry-list"></ul>
+      </div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='admin.js') }}"></script>
+</body>
+</html>
