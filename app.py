@@ -8,6 +8,8 @@ from flask import Flask, jsonify, render_template, request
 app = Flask(__name__, instance_relative_config=True)
 DATABASE_PATH = Path(app.instance_path) / "inquiries.db"
 STATUS_OPEN = "未対応"
+STATUS_DONE = "対応済み"
+VALID_STATUSES = {STATUS_OPEN, STATUS_DONE}
 
 
 def get_db_connection():
@@ -113,6 +115,56 @@ def create_inquiry():
             "created_at": created_at,
         }
     ), 201
+
+
+@app.route("/api/inquiries/<int:inquiry_id>/status", methods=["PATCH"])
+def update_inquiry_status(inquiry_id):
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify({"error": "JSON形式のリクエスト本文を指定してください。"}), 400
+
+    status = data.get("status")
+
+    if not isinstance(status, str) or status not in VALID_STATUSES:
+        return jsonify({"error": "対応状況は「未対応」または「対応済み」を指定してください。"}), 400
+
+    connection = get_db_connection()
+
+    try:
+        cursor = connection.execute(
+            "UPDATE inquiries SET status = ? WHERE id = ?",
+            (status, inquiry_id),
+        )
+
+        if cursor.rowcount == 0:
+            return jsonify({"error": "問い合わせが見つかりません。"}), 404
+
+        connection.commit()
+    finally:
+        connection.close()
+
+    return jsonify({"id": inquiry_id, "status": status})
+
+
+@app.route("/api/inquiries/<int:inquiry_id>", methods=["DELETE"])
+def delete_inquiry(inquiry_id):
+    connection = get_db_connection()
+
+    try:
+        cursor = connection.execute(
+            "DELETE FROM inquiries WHERE id = ?",
+            (inquiry_id,),
+        )
+
+        if cursor.rowcount == 0:
+            return jsonify({"error": "問い合わせが見つかりません。"}), 404
+
+        connection.commit()
+    finally:
+        connection.close()
+
+    return jsonify({"id": inquiry_id, "message": "問い合わせを削除しました。"})
 
 
 if __name__ == "__main__":
