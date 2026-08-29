@@ -1,15 +1,41 @@
+import hmac
+import os
 import sqlite3
 from datetime import datetime
+from functools import wraps
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request
+from dotenv import load_dotenv
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from werkzeug.security import check_password_hash
+
+
+load_dotenv(Path(__file__).with_name(".env"))
+
+
+def get_required_environment_variable(name):
+    value = os.environ.get(name)
+
+    if not value:
+        raise RuntimeError(
+            f"{name}が設定されていません。.envに必要な設定を追加してください。"
+        )
+
+    return value
 
 
 app = Flask(__name__, instance_relative_config=True)
+app.config.update(
+    SECRET_KEY=get_required_environment_variable("SECRET_KEY"),
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+)
 DATABASE_PATH = Path(app.instance_path) / "inquiries.db"
 STATUS_OPEN = "未対応"
 STATUS_DONE = "対応済み"
 VALID_STATUSES = {STATUS_OPEN, STATUS_DONE}
+ADMIN_USERNAME = get_required_environment_variable("ADMIN_USERNAME")
+ADMIN_PASSWORD_HASH = get_required_environment_variable("ADMIN_PASSWORD_HASH")
 
 
 def get_db_connection():
@@ -43,17 +69,83 @@ def init_db():
 init_db()
 
 
+def is_admin_logged_in():
+    return session.get("is_admin") is True
+
+
+def admin_page_required(view):
+    @wraps(view)
+    def wrapped_view(*args, **kwargs):
+        if not is_admin_logged_in():
+            return redirect(url_for("admin_login"))
+
+        return view(*args, **kwargs)
+
+    return wrapped_view
+
+
+def admin_api_required(view):
+    @wraps(view)
+    def wrapped_view(*args, **kwargs):
+        if not is_admin_logged_in():
+            return jsonify({"error": "ログインが必要です。"}), 401
+
+        return view(*args, **kwargs)
+
+    return wrapped_view
+
+
+def credentials_are_valid(username, password):
+    try:
+        password_is_valid = check_password_hash(ADMIN_PASSWORD_HASH, password)
+    except ValueError:
+        password_is_valid = False
+
+    username_is_valid = hmac.compare_digest(username, ADMIN_USERNAME)
+    return username_is_valid and password_is_valid
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
 
 
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    if is_admin_logged_in():
+        return redirect(url_for("admin"))
+
+    error = None
+
+    if request.method == "POST":
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+
+        if credentials_are_valid(username, password):
+            session.clear()
+            session["is_admin"] = True
+            return redirect(url_for("admin"))
+
+        error = "ユーザー名またはパスワードが正しくありません。"
+
+    return render_template("login.html", error=error)
+
+
+@app.route("/admin/logout", methods=["POST"])
+@admin_page_required
+def admin_logout():
+    session.clear()
+    return redirect(url_for("admin_login"))
+
+
 @app.route("/admin")
+@admin_page_required
 def admin():
     return render_template("admin.html")
 
 
 @app.route("/api/inquiries", methods=["GET"])
+@admin_api_required
 def get_inquiries():
     connection = get_db_connection()
 
@@ -123,6 +215,7 @@ def create_inquiry():
 
 
 @app.route("/api/inquiries/<int:inquiry_id>/status", methods=["PATCH"])
+@admin_api_required
 def update_inquiry_status(inquiry_id):
     data = request.get_json(silent=True)
 
@@ -153,6 +246,7 @@ def update_inquiry_status(inquiry_id):
 
 
 @app.route("/api/inquiries/<int:inquiry_id>", methods=["DELETE"])
+@admin_api_required
 def delete_inquiry(inquiry_id):
     connection = get_db_connection()
 

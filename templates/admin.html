@@ -8,8 +8,11 @@
 </head>
 <body>
   <main class="app">
-    <header>
+    <header class="admin-page-header">
       <h1>お問い合わせ管理</h1>
+      <form class="logout-form" method="post" action="{{ url_for('admin_logout') }}">
+        <button class="secondary-button" type="submit">ログアウト</button>
+      </form>
     </header>
 
     <section class="panel" aria-labelledby="list-title">

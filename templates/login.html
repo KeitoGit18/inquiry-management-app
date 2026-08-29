@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理者ログイン</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>管理者ログイン</h1>
+    </header>
+
+    <div class="layout public-layout">
+      <section class="panel" aria-labelledby="login-title">
+        <div class="panel-header">
+          <h2 class="panel-title" id="login-title">ログイン</h2>
+        </div>
+
+        {% if error %}
+          <p class="message error show" role="alert">{{ error }}</p>
+        {% endif %}
+
+        <form method="post">
+          <div class="form-group">
+            <label for="username">ユーザー名</label>
+            <input
+              type="text"
+              id="username"
+              name="username"
+              autocomplete="username"
+              required
+              autofocus
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="password">パスワード</label>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              autocomplete="current-password"
+              required
+            >
+          </div>
+
+          <div class="button-row">
+            <button class="primary-button" type="submit">ログイン</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
