@@ -13,7 +13,7 @@ TEST_ADMIN_PASSWORD = "pytest-password"
 
 
 @pytest.fixture
-def app_module(tmp_path, monkeypatch):
+def app_module(tmp_path, monkeypatch, request):
     """Load the application without touching the real .env or instance DB."""
     instance_path = tmp_path / "instance"
     project_root = Path(__file__).resolve().parents[1]
@@ -25,14 +25,21 @@ def app_module(tmp_path, monkeypatch):
         "auto_find_instance_path",
         lambda self: str(instance_path),
     )
-    monkeypatch.setenv("SECRET_KEY", "pytest-only-secret-key")
-    monkeypatch.setenv("ADMIN_USERNAME", TEST_ADMIN_USERNAME)
-    monkeypatch.setenv(
-        "ADMIN_PASSWORD_HASH",
-        generate_password_hash(TEST_ADMIN_PASSWORD),
-    )
+    test_environment = {
+        "SECRET_KEY": "pytest-only-secret-key",
+        "ADMIN_USERNAME": TEST_ADMIN_USERNAME,
+        "ADMIN_PASSWORD_HASH": generate_password_hash(TEST_ADMIN_PASSWORD),
+        "APP_ENV": "development",
+        "RATELIMIT_STORAGE_URI": "memory://",
+        "FLASK_DEBUG": "0",
+    }
+    test_environment.update(getattr(request, "param", {}))
+
+    for name, value in test_environment.items():
+        monkeypatch.setenv(name, value)
 
     sys.modules.pop("app", None)
+    module = None
 
     try:
         module = importlib.import_module("app")
@@ -43,6 +50,8 @@ def app_module(tmp_path, monkeypatch):
 
         yield module
     finally:
+        if module is not None:
+            module.limiter.reset()
         sys.modules.pop("app", None)
 
 

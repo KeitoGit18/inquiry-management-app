@@ -7,10 +7,47 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from werkzeug.security import check_password_hash
 
 
 load_dotenv(Path(__file__).with_name(".env"))
+
+
+INQUIRY_FIELD_LIMITS = {
+    "name": 100,
+    "email": 254,
+    "content": 5000,
+}
+INQUIRY_FIELD_LABELS = {
+    "name": "名前",
+    "email": "メールアドレス",
+    "content": "問い合わせ内容",
+}
+MAX_REQUEST_SIZE_BYTES = 64 * 1024
+LOGIN_RATE_LIMIT = "5 per minute"
+INQUIRY_RATE_LIMIT = "10 per minute"
+RATE_LIMIT_ERROR_MESSAGE = (
+    "短時間に操作が集中しました。しばらく待ってから、もう一度お試しください。"
+)
+REQUEST_TOO_LARGE_ERROR_MESSAGE = (
+    "リクエストのサイズが大きすぎます。入力内容を短くして、もう一度お試しください。"
+)
+CONTENT_SECURITY_POLICY = "; ".join(
+    (
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self'",
+        "connect-src 'self'",
+        "img-src 'self' data:",
+        "font-src 'self'",
+        "object-src 'none'",
+        "base-uri 'none'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+    )
+)
 
 
 def get_required_environment_variable(name):
@@ -24,11 +61,29 @@ def get_required_environment_variable(name):
     return value
 
 
+APP_ENV = os.environ.get("APP_ENV", "development").strip().lower() or "development"
+IS_PRODUCTION = APP_ENV == "production"
+RATE_LIMIT_STORAGE_URI = (
+    os.environ.get("RATELIMIT_STORAGE_URI", "memory://").strip() or "memory://"
+)
+
+
 app = Flask(__name__, instance_relative_config=True)
 app.config.update(
+    DEBUG=False,
+    MAX_CONTENT_LENGTH=MAX_REQUEST_SIZE_BYTES,
+    RATELIMIT_HEADERS_ENABLED=True,
+    RATELIMIT_STORAGE_URI=RATE_LIMIT_STORAGE_URI,
     SECRET_KEY=get_required_environment_variable("SECRET_KEY"),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=IS_PRODUCTION,
+)
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=[],
+    storage_uri=app.config["RATELIMIT_STORAGE_URI"],
 )
 DATABASE_PATH = Path(app.instance_path) / "inquiries.db"
 STATUS_OPEN = "未対応"
@@ -69,6 +124,31 @@ def init_db():
 init_db()
 
 
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Content-Security-Policy", CONTENT_SECURITY_POLICY)
+    return response
+
+
+@app.errorhandler(413)
+def request_too_large(error):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": REQUEST_TOO_LARGE_ERROR_MESSAGE}), 413
+
+    return render_template("login.html", error=REQUEST_TOO_LARGE_ERROR_MESSAGE), 413
+
+
+@app.errorhandler(429)
+def rate_limit_exceeded(error):
+    if request.path == "/admin/login":
+        return render_template("login.html", error=RATE_LIMIT_ERROR_MESSAGE), 429
+
+    return jsonify({"error": RATE_LIMIT_ERROR_MESSAGE}), 429
+
+
 def is_admin_logged_in():
     return session.get("is_admin") is True
 
@@ -107,10 +187,14 @@ def credentials_are_valid(username, password):
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template(
+        "index.html",
+        inquiry_field_limits=INQUIRY_FIELD_LIMITS,
+    )
 
 
 @app.route("/admin/login", methods=["GET", "POST"])
+@limiter.limit(LOGIN_RATE_LIMIT, methods=["POST"])
 def admin_login():
     if is_admin_logged_in():
         return redirect(url_for("admin"))
@@ -164,6 +248,7 @@ def get_inquiries():
 
 
 @app.route("/api/inquiries", methods=["POST"])
+@limiter.limit(INQUIRY_RATE_LIMIT)
 def create_inquiry():
     data = request.get_json(silent=True)
 
@@ -183,6 +268,21 @@ def create_inquiry():
 
     if not name or not email or not content:
         return jsonify({"error": "名前、メールアドレス、問い合わせ内容は必須です。"}), 400
+
+    field_values = {
+        "name": name,
+        "email": email,
+        "content": content,
+    }
+
+    for field_name, value in field_values.items():
+        maximum_length = INQUIRY_FIELD_LIMITS[field_name]
+
+        if len(value) > maximum_length:
+            field_label = INQUIRY_FIELD_LABELS[field_name]
+            return jsonify(
+                {"error": f"{field_label}は{maximum_length}文字以内で入力してください。"}
+            ), 400
 
     if "@" not in email:
         return jsonify({"error": "メールアドレスの形式が正しくありません。"}), 400
@@ -267,4 +367,4 @@ def delete_inquiry(inquiry_id):
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=False)

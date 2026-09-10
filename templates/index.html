@@ -23,17 +23,17 @@
         <form id="inquiry-form">
           <div class="form-group">
             <label for="name">名前</label>
-            <input type="text" id="name" name="name" autocomplete="name" required>
+            <input type="text" id="name" name="name" autocomplete="name" maxlength="{{ inquiry_field_limits['name'] }}" required>
           </div>
 
           <div class="form-group">
             <label for="email">メールアドレス</label>
-            <input type="email" id="email" name="email" autocomplete="email" required>
+            <input type="email" id="email" name="email" autocomplete="email" maxlength="{{ inquiry_field_limits['email'] }}" required>
           </div>
 
           <div class="form-group">
             <label for="content">お問い合わせ内容</label>
-            <textarea id="content" name="content" required></textarea>
+            <textarea id="content" name="content" maxlength="{{ inquiry_field_limits['content'] }}" required></textarea>
           </div>
 
           <div class="button-row">

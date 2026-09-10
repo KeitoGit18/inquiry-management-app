@@ -49,7 +49,7 @@ loadInquiries();
 
 async function loadInquiries() {
   emptyMessage.textContent = "お問い合わせを読み込んでいます。";
-  emptyMessage.style.display = "block";
+  emptyMessage.hidden = false;
   inquiryList.textContent = "";
 
   try {
@@ -92,7 +92,7 @@ function renderInquiries() {
 
   inquiryList.textContent = "";
   inquiryCount.textContent = displayedInquiries.length + "件";
-  emptyMessage.style.display = displayedInquiries.length === 0 ? "block" : "none";
+  emptyMessage.hidden = displayedInquiries.length !== 0;
   emptyMessage.textContent = hasActiveFilter()
     ? "該当するお問い合わせはありません"
     : "まだお問い合わせが登録されていません。";
